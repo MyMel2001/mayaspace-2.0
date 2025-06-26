@@ -1,0 +1,6 @@
+node_modules
+.env
+mayaspace.sqlite
+sessions.sqlite
+npm-debug.log
+.DS_Store uploads/

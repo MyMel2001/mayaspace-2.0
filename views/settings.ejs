@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/js/aprilfools.js" defer></script>
+</head>
+<body>
+    <%- include('partials/navbar') %>
+
+    <h1>Settings</h1>
+
+    <form action="/settings" method="POST">
+        <div>
+            <label for="displayName">Display Name</label>
+            <input type="text" id="displayName" name="displayName" value="<%= user.displayName || '' %>">
+        </div>
+        <div>
+            <label for="bio">Bio</label>
+            <textarea id="bio" name="bio"><%= user.bio || '' %></textarea>
+        </div>
+        <div>
+            <label for="customCss">Custom Profile CSS</label>
+            <textarea id="customCss" name="customCss" rows="10"><%= user.customCss || '' %></textarea>
+        </div>
+        <button type="submit">Save</button>
+    </form>
+</body>
+</html> 

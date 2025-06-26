@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/js/aprilfools.js" defer></script>
+</head>
+<body>
+    <%- include('partials/navbar') %>
+    <h1>Welcome to MayaSpace</h1>
+
+    <% if (sessionUser) { %>
+    <form action="/posts" method="POST" enctype="multipart/form-data">
+        <h2>What's on your mind?</h2>
+        <textarea name="content" rows="3" required></textarea>
+        <div>
+            <label for="media">Attach Image or Video:</label>
+            <input type="file" id="media" name="media" accept="image/*,video/*">
+        </div>
+        <button type="submit">Post</button>
+    </form>
+    <% } %>
+
+    <h2>Recent Posts</h2>
+    <% posts.forEach(post => { %>
+        <div>
+            <p>
+                <strong><a href="/u/<%= post.author %>"><%= post.author %></a></strong>
+                <small><%= new Date(post.createdAt).toLocaleString() %></small>
+            </p>
+            <p><%= post.content %></p>
+            <% if (post.attachment) { %>
+                <% if (post.attachment.mediaType.startsWith('image/')) { %>
+                    <img src="<%= post.attachment.url.replace('https://' + DOMAIN, '') %>" alt="User upload" style="max-width: 500px; max-height: 500px;">
+                <% } else if (post.attachment.mediaType.startsWith('video/')) { %>
+                    <video src="<%= post.attachment.url.replace('https://' + DOMAIN, '') %>" controls style="max-width: 500px; max-height: 500px;"></video>
+                <% } %>
+            <% } %>
+        </div>
+        <hr>
+    <% }) %>
+
+</body>
+</html> 

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/js/aprilfools.js" defer></script>
+    <% if (user.customCss) { %>
+    <style>
+        <%- user.customCss %>
+    </style>
+    <% } %>
+</head>
+<body>
+    <%- include('partials/navbar') %>
+
+    <h1><%= user.displayName || user.username %></h1>
+    <p>@<%= user.username %></p>
+    <p>Joined: <%= new Date(user.createdAt).toLocaleDateString() %></p>
+
+    <% if (user.bio) { %>
+        <p><%= user.bio %></p>
+    <% } %>
+
+    <% if (sessionUser && sessionUser.username === user.username) { %>
+        <a href="/settings">Edit Profile</a>
+    <% } %>
+
+    <hr>
+    <h2>Posts</h2>
+    <% posts.forEach(post => { %>
+        <div>
+            <p><small><%= new Date(post.createdAt).toLocaleString() %></small></p>
+            <p><%= post.content %></p>
+            <% if (post.attachment) { %>
+                <% if (post.attachment.mediaType.startsWith('image/')) { %>
+                    <img src="<%= post.attachment.url.replace('https://' + DOMAIN, '') %>" alt="User upload" style="max-width: 500px; max-height: 500px;">
+                <% } else if (post.attachment.mediaType.startsWith('video/')) { %>
+                    <video src="<%= post.attachment.url.replace('https://' + DOMAIN, '') %>" controls style="max-width: 500px; max-height: 500px;"></video>
+                <% } %>
+            <% } %>
+        </div>
+        <hr>
+    <% }) %>
+
+</body>
+</html>
