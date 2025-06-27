@@ -276,10 +276,15 @@ app.post('/settings', async (req, res) => {
     await db.set(`users.${username}.bio`, bio);
     await db.set(`users.${username}.customCss`, sanitizedCss);
 
-    const actor = await apex.store.getObject(res.locals.apex.actor.id);
+    const actorId = req.session.user.id;
+    const actor = await apex.store.getObject(actorId);
+    if (!actor) {
+        return res.status(404).send('Actor not found.');
+    }
+    
     actor.name = displayName;
     actor.summary = bio;
-    await apex.store.updateObject(actor, true);
+    await apex.store.updateObject(actor, actorId, true);
 
     res.redirect(`/u/${username}`);
 });
