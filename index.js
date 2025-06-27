@@ -12,6 +12,7 @@ const path = require('path');
 const multer = require('multer');
 const sharp = require('sharp');
 const ffmpeg = require('fluent-ffmpeg');
+const crypto = require('crypto');
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -95,96 +96,105 @@ app.get('/', async (req, res) => {
     });
 });
 
-app.post('/posts', upload.single('media'), async (req, res) => {
-    if (!req.session.user) return res.status(401).send('Unauthorized');
-    const { content } = req.body;
-    if (!content) return res.status(400).send('Post content cannot be empty.');
+app.post('/new-post', upload.single('media'), async (req, res) => {
+  if (!req.session.user) {
+    return res.redirect('/login');
+  }
 
-    const user = await db.get(`users.${req.session.user.username}`);
-    
-    let attachment = null;
-    if (req.file) {
-        const tempPath = req.file.path;
-        const extension = path.extname(req.file.originalname).toLowerCase();
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        let newFilename;
-        let newMimeType = req.file.mimetype;
+  const { content } = req.body;
+  if (!content) {
+    return res.status(400).send('Content is required');
+  }
 
-        if (req.file.mimetype.startsWith('image/') && extension !== '.gif') {
-            newFilename = uniqueSuffix + '.webp';
-            newMimeType = 'image/webp';
-        } else if (req.file.mimetype.startsWith('video/') || extension === '.gif') {
-            newFilename = uniqueSuffix + '.mp4';
-            newMimeType = 'video/mp4';
-        } else {
-            newFilename = uniqueSuffix + extension;
-        }
-        
-        const targetPath = path.join(__dirname, 'public/media', newFilename);
+  let mediaPath = null;
+  if (req.file) {
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const tempPath = req.file.path;
+    const targetPath = path.join('public', 'uploads', req.file.filename);
+    mediaPath = req.file.filename;
 
-        try {
-            if (req.file.mimetype.startsWith('image/') && extension !== '.gif') {
-                await sharp(tempPath)
-                    .resize(1280, 1280, { fit: 'inside', withoutEnlargement: true })
-                    .toFormat('webp', { quality: 80 })
-                    .toFile(targetPath);
-                fs.unlinkSync(tempPath); // Clean up temp file
-            } else if (req.file.mimetype.startsWith('video/') || extension === '.gif') {
-                await new Promise((resolve, reject) => {
-                    ffmpeg(tempPath)
-                        .outputOptions('-c:v libx264')
-                        .outputOptions('-crf 23')
-                        .outputOptions('-preset fast')
-                        .outputOptions('-c:a aac')
-                        .outputOptions('-b:a 128k')
-                        .on('end', () => {
-                             fs.unlinkSync(tempPath);
-                             resolve(); 
-                        })
-                        .on('error', (err) => {
-                            fs.unlinkSync(tempPath);
-                            reject(err);
-                        })
-                        .save(targetPath);
-                });
-            } else {
-                 fs.renameSync(tempPath, targetPath);
-            }
-        } catch (error) {
-            console.error('Error processing file:', error);
-            // Fallback to just moving the file if processing fails
-            if (fs.existsSync(tempPath)) fs.renameSync(tempPath, targetPath);
-        }
-
-        const mediaUrl = `https://${DOMAIN}/media/${newFilename}`;
-        attachment = {
-            type: 'Document',
-            mediaType: newMimeType,
-            url: mediaUrl,
-            name: 'User upload'
-        };
+    if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) {
+      const outputPath = targetPath + '.webp';
+      mediaPath += '.webp';
+      await sharp(tempPath).webp({ quality: 80 }).toFile(outputPath);
+      fs.unlinkSync(tempPath); // Clean up original upload
+    } else if (['.mp4', '.mov', '.webm'].includes(ext)) {
+      const outputPath = targetPath + '.mp4';
+      mediaPath += '.mp4';
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempPath)
+          .videoCodec('libx264')
+          .audioCodec('aac')
+          .toFormat('mp4')
+          .on('end', () => resolve())
+          .on('error', (err) => reject(err))
+          .save(outputPath);
+      }).finally(() => fs.unlinkSync(tempPath));
+    } else {
+       fs.renameSync(tempPath, targetPath);
     }
+  }
 
-    const noteObject = {
-        type: 'Note',
-        content: content,
-        attributedTo: user.actor.id,
-        to: 'https://www.w3.org/ns/activitystreams#Public',
-        cc: [user.actor.followers],
-        attachment: attachment ? [attachment] : []
+
+  const id = crypto.randomBytes(16).toString('hex');
+  const post = {
+    id,
+    author: req.session.user.username,
+    content,
+    createdAt: new Date().toISOString(),
+    media: mediaPath
+  };
+  db.posts.set(id, post);
+
+  // Federate post
+  if (process.env.APEX_DOMAIN) {
+    const note = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: `${process.env.APEX_URL}/posts/${post.id}`,
+      type: 'Note',
+      published: new Date().toISOString(),
+      attributedTo: `${process.env.APEX_URL}/u/${req.session.user.username}`,
+      content: `<p>${post.content}</p>`,
+      to: ['https://www.w3.org/ns/activitystreams#Public'],
+      cc: [`${process.env.APEX_URL}/u/${req.session.user.username}/followers`]
     };
-
-    const activity = await apex.publish(user.actor.id, noteObject);
-
-    const post = {
-        id: activity.object.id,
-        author: req.session.user.username,
-        content: content,
-        attachment: attachment,
-        createdAt: new Date().toISOString()
+    if (post.media) {
+      const mediaUrl = `${process.env.APEX_URL}/uploads/${post.media}`;
+      let mimeType = 'image/webp';
+      if (post.media.endsWith('.mp4')) {
+        mimeType = 'video/mp4';
+      }
+      note.attachment = [{
+        type: 'Document',
+        mediaType: mimeType,
+        url: mediaUrl,
+        name: 'attachment'
+      }];
+    }
+    const actorName = req.session.user.username;
+    // Manually invoke the outbox post handler
+    const mockReq = { ...req, body: note, params: { actor: actorName } };
+    const mockRes = {
+      locals: res.locals,
+      status: (code) => {
+        console.log(`Federation returned status ${code} for ${post.id}`);
+        return {
+          json: (data) => {
+            if (!res.headersSent) res.redirect('/');
+          }
+        }
+      },
+      json: (data) => {
+         if (!res.headersSent) res.redirect('/');
+      }
     };
-    await db.push('posts', post);
-    res.redirect('/');
+    const next = (err) => {
+      if (err) console.error('Federation error', err);
+      if (!res.headersSent) res.redirect('/');
+    };
+    return apex.net.outbox.post(mockReq, mockRes, next);
+  }
+  res.redirect('/');
 });
 
 app.get('/register', (req, res) => {
@@ -356,6 +366,11 @@ app.on('apex-inbox', async ({ activity }) => {
     } catch (err) {
         console.error('Error in inbox handler:', err);
     }
+});
+
+app.get('/posts/:id', (req, res) => {
+// ... existing code ...
+
 });
 
 // -- Server --
