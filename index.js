@@ -120,12 +120,12 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
     const targetPath = path.join('public', 'uploads', req.file.filename);
     mediaPath = req.file.filename;
 
-    if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) {
+    if (['.jpg', '.jpeg', '.png'].includes(ext)) {
       const outputPath = targetPath + '.webp';
       mediaPath += '.webp';
       await sharp(tempPath).webp({ quality: 80 }).toFile(outputPath);
       fs.unlinkSync(tempPath); // Clean up original upload
-    } else if (['.mp4', '.mov', '.webm'].includes(ext)) {
+    } else if (['.gif', '.mp4', '.mov', '.webm'].includes(ext)) {
       const outputPath = targetPath + '.mp4';
       mediaPath += '.mp4';
       await new Promise((resolve, reject) => {
