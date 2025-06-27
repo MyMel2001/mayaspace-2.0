@@ -144,7 +144,7 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
     createdAt: new Date().toISOString(),
     media: mediaPath
   };
-  db.posts.set(id, post);
+  await db.push('posts', post);
 
   // Federate post
   if (process.env.APEX_DOMAIN) {
