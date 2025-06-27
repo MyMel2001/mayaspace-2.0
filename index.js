@@ -110,6 +110,13 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
   if (req.file) {
     const ext = path.extname(req.file.originalname).toLowerCase();
     const tempPath = req.file.path;
+    
+    // Ensure uploads directory exists
+    const uploadsDir = path.join('public', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    
     const targetPath = path.join('public', 'uploads', req.file.filename);
     mediaPath = req.file.filename;
 
