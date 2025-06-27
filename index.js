@@ -148,9 +148,22 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
     id,
     author: req.session.user.username,
     content,
-    createdAt: new Date().toISOString(),
-    media: mediaPath
+    createdAt: new Date().toISOString()
   };
+  
+  // Add attachment if media was uploaded
+  if (mediaPath) {
+    const mediaUrl = `https://${DOMAIN}/uploads/${mediaPath}`;
+    let mimeType = 'image/webp';
+    if (mediaPath.endsWith('.mp4')) {
+      mimeType = 'video/mp4';
+    }
+    post.attachment = {
+      mediaType: mimeType,
+      url: mediaUrl
+    };
+  }
+  
   await db.push('posts', post);
 
   // Federate post
@@ -165,16 +178,11 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
       to: ['https://www.w3.org/ns/activitystreams#Public'],
       cc: [`${process.env.APEX_URL}/u/${req.session.user.username}/followers`]
     };
-    if (post.media) {
-      const mediaUrl = `${process.env.APEX_URL}/uploads/${post.media}`;
-      let mimeType = 'image/webp';
-      if (post.media.endsWith('.mp4')) {
-        mimeType = 'video/mp4';
-      }
+    if (post.attachment) {
       note.attachment = [{
         type: 'Document',
-        mediaType: mimeType,
-        url: mediaUrl,
+        mediaType: post.attachment.mediaType,
+        url: post.attachment.url.replace(`https://${DOMAIN}`, process.env.APEX_URL || `https://${DOMAIN}`),
         name: 'attachment'
       }];
     }
