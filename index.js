@@ -14,7 +14,12 @@ const sharp = require('sharp');
 const ffmpeg = require('fluent-ffmpeg');
 const crypto = require('crypto');
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: {
+    fileSize: 100 * 1024 * 1024 // 100MB limit
+  }
+});
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -29,6 +34,15 @@ app.set('view engine', 'ejs');
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+// Remove timeouts for upload processing
+app.use((req, res, next) => {
+  if (req.path === '/new-post') {
+    req.setTimeout(0); // No timeout
+    res.setTimeout(0); // No timeout
+  }
+  next();
+});
 
 app.use(session({
     store: new SQLiteStore({ db: process.env.SESSIONS_DATABASE_PATH || 'sessions.sqlite', concurrentDB: true }),
