@@ -12,13 +12,10 @@
     <h1>Welcome to MayaSpace</h1>
 
     <% if (sessionUser) { %>
-    <form action="/posts" method="POST" enctype="multipart/form-data">
-        <h2>What's on your mind?</h2>
-        <textarea name="content" rows="3" required></textarea>
-        <div>
-            <label for="media">Attach Image or Video:</label>
-            <input type="file" id="media" name="media" accept="image/*,video/*">
-        </div>
+    <h3>Create a new post</h3>
+    <form action="/new-post" method="POST" enctype="multipart/form-data">
+        <textarea name="content" rows="4" cols="50" required></textarea><br>
+        <input type="file" name="media">
         <button type="submit">Post</button>
     </form>
     <% } %>
