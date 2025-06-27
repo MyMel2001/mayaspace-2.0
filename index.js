@@ -125,7 +125,21 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
       mediaPath += '.webp';
       await sharp(tempPath).webp({ quality: 80 }).toFile(outputPath);
       fs.unlinkSync(tempPath); // Clean up original upload
-    } else if (['.gif', '.mp4', '.mov', '.webm'].includes(ext)) {
+    } else if (ext === '.gif') {
+      const outputPath = targetPath + '.gif';
+      mediaPath += '.gif';
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempPath)
+          .outputOptions([
+            '-vf', 'scale=iw*0.7:ih*0.7', // Scale to 70% of original dimensions
+            '-q:v', '20' // Quality setting (lower is better, 1-31 range, ~20 gives 80% quality)
+          ])
+          .toFormat('gif')
+          .on('end', () => resolve())
+          .on('error', (err) => reject(err))
+          .save(outputPath);
+      }).finally(() => fs.unlinkSync(tempPath));
+    } else if (['.mp4', '.mov', '.webm'].includes(ext)) {
       const outputPath = targetPath + '.mp4';
       mediaPath += '.mp4';
       await new Promise((resolve, reject) => {
@@ -157,6 +171,8 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
     let mimeType = 'image/webp';
     if (mediaPath.endsWith('.mp4')) {
       mimeType = 'video/mp4';
+    } else if (mediaPath.endsWith('.gif')) {
+      mimeType = 'image/gif';
     }
     post.attachment = {
       mediaType: mimeType,
