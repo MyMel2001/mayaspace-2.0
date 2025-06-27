@@ -174,10 +174,12 @@ app.post('/posts', upload.single('media'), async (req, res) => {
         attachment: attachment ? [attachment] : []
     };
 
-    const activity = await apex.buildActivity('Create', user.actor.id, noteObject);
+    const note = await apex.utils.createObject(noteObject);
+    await apex.store.saveObject(note);
+    await apex.buildActivity('Create', user.actor.id, note);
 
     const post = {
-        id: activity.object.id,
+        id: note.id,
         author: req.session.user.username,
         content: content,
         attachment: attachment,
