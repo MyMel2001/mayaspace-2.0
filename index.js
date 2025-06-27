@@ -325,24 +325,25 @@ app.get('/u/:username/liked', (req, res) => {
 });
 
 // ActivityPub event handlers
-apex.on('inbox', async (req, res) => {
-    const activity = req.body;
+app.on('apex-inbox', async ({ activity }) => {
     try {
         if (activity.type === 'Follow') {
             const followedUsername = apex.utils.nameFromIRI(activity.object);
-            if (!followedUsername) return res.status(400).send();
+            if (!followedUsername) return;
             
             const user = await db.get(`users.${followedUsername}`);
-            if (!user) return res.status(404).send();
+            if (!user) return;
 
-            await db.push(`users.${followedUsername}.followers`, activity.actor);
-            await apex.buildActivity('Accept', user.actor.id, activity);
+            const followers = await db.get(`users.${followedUsername}.followers`) || [];
+            if (!followers.includes(activity.actor)) {
+                await db.push(`users.${followedUsername}.followers`, activity.actor);
+            }
         } else if (activity.type === 'Undo' && activity.object.type === 'Follow') {
             const followedUsername = apex.utils.nameFromIRI(activity.object.object);
-            if (!followedUsername) return res.status(400).send();
+            if (!followedUsername) return;
 
             const user = await db.get(`users.${followedUsername}`);
-            if (!user) return res.status(404).send();
+            if (!user) return;
 
             const currentFollowers = await db.get(`users.${followedUsername}.followers`) || [];
             const newFollowers = currentFollowers.filter(follower => follower !== activity.actor);
@@ -351,7 +352,6 @@ apex.on('inbox', async (req, res) => {
     } catch (err) {
         console.error('Error in inbox handler:', err);
     }
-    res.status(200).send();
 });
 
 // -- Server --
