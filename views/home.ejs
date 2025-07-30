@@ -81,6 +81,12 @@
                                 <span>💬</span>
                                 <span>Reply</span>
                             </button>
+                            <% if (post.blueskyWebUrl || post.blueskyUri) { %>
+                                <a href="<%= post.blueskyWebUrl || post.blueskyUri %>" target="_blank" class="post-action" style="text-decoration: none;">
+                                    <span>🦋</span>
+                                    <span>View on Bluesky</span>
+                                </a>
+                            <% } %>
                         </div>
                         
                         <!-- Reply form (initially hidden) -->

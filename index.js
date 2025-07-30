@@ -385,11 +385,17 @@ async function bridgeToBluesky(username, post) {
     const result = await agent.post(blueskyPost);
     console.log('Successfully bridged post to Bluesky:', result.uri);
     
-    // Update the post with Bluesky URI for reference
+    // Convert AT Protocol URI to web URL for easier access
+    const postId = result.uri.split('/').pop(); // Extract post ID from URI
+    const webUrl = `https://bsky.app/profile/${blueskySettings.handle}/post/${postId}`;
+    console.log('Bluesky web URL:', webUrl);
+    
+    // Update the post with both URIs for reference
     const posts = await db.get('posts') || [];
     const postIndex = posts.findIndex(p => p.id === post.id);
     if (postIndex !== -1) {
-      posts[postIndex].blueskyUri = result.uri;
+      posts[postIndex].blueskyUri = result.uri; // AT Protocol URI
+      posts[postIndex].blueskyWebUrl = webUrl;  // Human-readable web URL
       await db.set('posts', posts);
     }
     
