@@ -49,6 +49,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// Session configuration (must come before routes that use sessions)
+app.use(session({
+    store: new SQLiteStore({ db: process.env.SESSIONS_DATABASE_PATH || 'sessions.sqlite', concurrentDB: true }),
+    secret: process.env.SESSION_SECRET || 'a very secret key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } // 1 week
+}));
+
 // API Routes
 // User search endpoint
 app.get('/api/search/users', async (req, res) => {
@@ -385,13 +394,7 @@ async function bridgeToBluesky(username, post) {
   }
 }
 
-app.use(session({
-    store: new SQLiteStore({ db: process.env.SESSIONS_DATABASE_PATH || 'sessions.sqlite', concurrentDB: true }),
-    secret: process.env.SESSION_SECRET || 'a very secret key',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } // 1 week
-}));
+// Session middleware moved above to before API routes
 
 // -- ActivityPub --
 const apex = activitypub({
