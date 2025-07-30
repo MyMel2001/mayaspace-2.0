@@ -350,6 +350,7 @@ async function bridgeToBluesky(username, post) {
   
   try {
     console.log('Bridging post to Bluesky for user:', username);
+    console.log('Using handle:', JSON.stringify(blueskySettings.handle));
     const agent = new BskyAgent({ service: 'https://bsky.social' });
     
     const loginResult = await agent.login({
@@ -719,12 +720,17 @@ app.post('/settings', async (req, res) => {
     // Handle Bluesky settings
     if (blueskyHandle || blueskyPassword || enableBlueskyBridge !== undefined) {
         console.log('=== BLUESKY SETTINGS UPDATE ===');
-        console.log('Handle:', blueskyHandle);
+        console.log('Raw handle:', JSON.stringify(blueskyHandle)); // Shows invisible characters
         console.log('Password length:', blueskyPassword ? blueskyPassword.length : 0);
         console.log('Bridge enabled:', enableBlueskyBridge === 'on');
         
+        // Sanitize handle by removing invisible characters and whitespace
+        const sanitizedHandle = blueskyHandle ? blueskyHandle.trim().replace(/[\u200B-\u200D\uFEFF\u202A-\u202E]/g, '') : '';
+        
+        console.log('Sanitized handle:', JSON.stringify(sanitizedHandle));
+        
         const blueskySettings = {
-            handle: blueskyHandle || '',
+            handle: sanitizedHandle,
             password: blueskyPassword || '',
             enabled: enableBlueskyBridge === 'on'
         };
@@ -775,7 +781,12 @@ app.post('/settings', async (req, res) => {
             console.log('Skipping Bluesky connection test - missing credentials or disabled');
         }
         
-        console.log('Saving Bluesky settings:', blueskySettings);
+        // Log settings without exposing password
+        const settingsToLog = { ...blueskySettings };
+        if (settingsToLog.password) {
+            settingsToLog.password = `[${settingsToLog.password.length} characters]`;
+        }
+        console.log('Saving Bluesky settings:', settingsToLog);
         await db.set(`users.${username}.blueskySettings`, blueskySettings);
     }
 
