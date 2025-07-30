@@ -1,0 +1,122 @@
+<%
+// Captcha partial template
+// Parameters:
+// - id: unique identifier for this captcha instance
+// - size: 'large', 'small', or 'medium' 
+// - context: 'form', 'reply', etc.
+// - question: the math question (optional, for server-side rendering)
+
+const id = locals.id || 'captcha';
+const size = locals.size || 'large';
+const context = locals.context || 'form';
+const question = locals.question || '';
+
+// Set classes based on size
+let imageClass, containerClass, inputClass;
+switch(size) {
+    case 'small':
+        imageClass = 'captcha-image-small';
+        containerClass = 'captcha-container-small';
+        inputClass = 'captcha-input-small';
+        break;
+    case 'medium':
+        imageClass = 'captcha-image-medium';
+        containerClass = 'captcha-container-medium';
+        inputClass = 'captcha-input-medium';
+        break;
+    default: // large
+        imageClass = 'captcha-image';
+        containerClass = 'captcha-container';
+        inputClass = 'captcha-input';
+}
+%>
+
+<div class="<%= containerClass %>" data-captcha-container="<%= id %>">
+    <% if (size === 'small') { %>
+        <!-- Small captcha for replies -->
+        <img class="<%= imageClass %>" 
+             data-captcha-image="<%= id %>" 
+             src="" 
+             alt="Math problem" 
+             style="display: none;" />
+        <div class="captcha-question-small" 
+             data-captcha-text="<%= id %>">
+            <%= question || 'Loading...' %>
+        </div>
+        <input type="number" 
+               name="captcha" 
+               class="<%= inputClass %>" 
+               placeholder="Answer" 
+               required>
+        <button type="button" 
+                class="btn btn-ghost btn-sm" 
+                onclick="refreshCaptcha('<%= id %>')">🔄</button>
+    <% } else { %>
+        <!-- Large/medium captcha for forms -->
+        <label class="form-label">Solve this math problem:</label>
+        <div class="captcha-display-container">
+            <img class="<%= imageClass %>" 
+                 data-captcha-image="<%= id %>" 
+                 src="" 
+                 alt="Math problem" 
+                 style="display: none;" />
+            <div class="captcha-display" 
+                 data-captcha-text="<%= id %>">
+                <%= question || 'Loading...' %>
+            </div>
+            <button type="button" 
+                    class="btn btn-ghost btn-sm" 
+                    onclick="refreshCaptcha('<%= id %>')">🔄 New Problem</button>
+        </div>
+        <input type="number" 
+               name="captcha" 
+               class="form-input" 
+               placeholder="Your answer" 
+               required>
+    <% } %>
+</div>
+
+<script>
+// Universal captcha refresh function
+window.refreshCaptcha = window.refreshCaptcha || async function(captchaId) {
+    try {
+        const response = await fetch('/api/captcha');
+        const data = await response.json();
+        
+        const captchaImage = document.querySelector(`[data-captcha-image="${captchaId}"]`);
+        const captchaText = document.querySelector(`[data-captcha-text="${captchaId}"]`);
+        
+        if (data.image && captchaImage) {
+            captchaImage.src = data.image;
+            captchaImage.style.display = 'block';
+            if (captchaText) captchaText.style.display = 'none';
+        } else {
+            // Fallback to text
+            if (captchaImage) captchaImage.style.display = 'none';
+            if (captchaText) {
+                captchaText.style.display = 'block';
+                captchaText.textContent = data.question;
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load captcha:', error);
+        // Show error in text fallback
+        const captchaText = document.querySelector(`[data-captcha-text="${captchaId}"]`);
+        const captchaImage = document.querySelector(`[data-captcha-image="${captchaId}"]`);
+        if (captchaImage) captchaImage.style.display = 'none';
+        if (captchaText) {
+            captchaText.style.display = 'block';
+            captchaText.textContent = 'Error loading captcha';
+        }
+    }
+};
+
+// Auto-load captcha when the partial is rendered
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.querySelector('[data-captcha-container="<%= id %>"]');
+    if (container) {
+        // Small delay to ensure DOM is ready
+        setTimeout(() => refreshCaptcha('<%= id %>'), 100);
+    }
+});
+</script>
