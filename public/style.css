@@ -529,6 +529,26 @@ h3 {
   animation: spin 1s linear infinite;
 }
 
+/* Quoted post styles */
+.quoted-post {
+  background-color: var(--bg-tertiary);
+  border-left: 4px solid var(--accent-primary);
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 0.375rem;
+  font-style: italic;
+  color: var(--text-secondary);
+  position: relative;
+}
+
+.quoted-post::before {
+  content: "💬";
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  opacity: 0.5;
+}
+
 /* Chat styles (for future implementation) */
 .chat-container {
   height: 400px;

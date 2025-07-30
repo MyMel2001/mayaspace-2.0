@@ -477,20 +477,35 @@ app.get('/', async (req, res) => {
     
     // Sort posts by score (likes - dislikes) first, then by creation time
     // Higher score means higher position
-    const sortedPosts = postsWithScores
-        .filter(post => !post.replyTo) // Only show top-level posts on home
-        .sort((a, b) => {
-            // Primary sort: by score (likes - dislikes)
-            const scoreDiff = b.score - a.score;
-            if (scoreDiff !== 0) return scoreDiff;
-            
-            // Secondary sort: by creation time (newest first)
-            return new Date(b.createdAt) - new Date(a.createdAt);
-        });
+    // Now includes replies with quoted original posts
+    const sortedPosts = postsWithScores.sort((a, b) => {
+        // Primary sort: by score (likes - dislikes)
+        const scoreDiff = b.score - a.score;
+        if (scoreDiff !== 0) return scoreDiff;
+        
+        // Secondary sort: by creation time (newest first)
+        return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+    
+    // Add quoted post information for replies
+    const postsWithQuotes = sortedPosts.map(post => {
+        if (post.replyTo) {
+            // Find the original post this is replying to
+            const originalPost = postsWithScores.find(p => p.id === post.replyTo);
+            if (originalPost) {
+                post.quotedPost = {
+                    content: originalPost.content,
+                    author: originalPost.author,
+                    createdAt: originalPost.createdAt
+                };
+            }
+        }
+        return post;
+    });
     
     res.render('home', { 
         title: 'Welcome to MayaSpace',
-        posts: sortedPosts
+        posts: postsWithQuotes
     });
 });
 
@@ -825,11 +840,26 @@ app.get('/u/:username', async (req, res) => {
     const allPosts = await db.get('posts') || [];
     const userPosts = allPosts.filter(p => p.author === username)
                               .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    // Add quoted post information for replies in profile view
+    const userPostsWithQuotes = userPosts.map(post => {
+        if (post.replyTo) {
+            const originalPost = allPosts.find(p => p.id === post.replyTo);
+            if (originalPost) {
+                post.quotedPost = {
+                    content: originalPost.content,
+                    author: originalPost.author,
+                    createdAt: originalPost.createdAt
+                };
+            }
+        }
+        return post;
+    });
 
     res.render('profile', {
         title: `${user.displayName || user.username}'s Profile`,
         user: user,
-        posts: userPosts
+        posts: userPostsWithQuotes
     });
 });
 

@@ -54,6 +54,11 @@
                         </div>
                         
                         <div class="post-content">
+                            <% if (post.quotedPost) { %>
+                                <div class="quoted-post">
+                                    "<%= post.quotedPost.content %>" --<%= post.quotedPost.author %>
+                                </div>
+                            <% } %>
                             <%= post.content %>
                         </div>
                         
