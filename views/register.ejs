@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,17 +9,54 @@
 </head>
 <body>
     <%- include('partials/navbar') %>
-    <h1>Register for MayaSpace</h1>
-    <form action="/register" method="POST">
-        <div>
-            <label for="username">Username</label>
-            <input type="text" id="username" name="username" required>
+    
+    <main>
+        <div class="form-container">
+            <h1>Register</h1>
+            <p style="color: var(--text-muted); text-align: center; margin-bottom: 2rem;">
+                Create your MayaSpace account and join the federated social network.
+            </p>
+            
+            <form action="/register" method="POST">
+                <div class="form-group">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" id="username" name="username" class="form-input" required 
+                           pattern="[a-zA-Z0-9_]+" title="Only letters, numbers, and underscores allowed">
+                    <small style="color: var(--text-muted);">This will be your unique identifier across the fediverse</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" id="password" name="password" class="form-input" required 
+                           minlength="6">
+                    <small style="color: var(--text-muted);">At least 6 characters long</small>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Create Account</button>
+            </form>
+            
+            <div class="text-center mt-4">
+                <p style="color: var(--text-muted);">
+                    Already have an account? 
+                    <a href="/login" style="color: var(--accent-primary); text-decoration: none;">Login here</a>
+                </p>
+            </div>
         </div>
-        <div>
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" required>
-        </div>
-        <button type="submit">Register</button>
-    </form>
+    </main>
+    
+    <script>
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Dark mode toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+    </script>
 </body>
 </html> 

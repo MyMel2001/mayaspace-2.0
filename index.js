@@ -13,6 +13,9 @@ const multer = require('multer');
 const sharp = require('sharp');
 const ffmpeg = require('fluent-ffmpeg');
 const crypto = require('crypto');
+const http = require('http');
+const { Server } = require('socket.io');
+const { BskyAgent } = require('@atproto/api');
 
 const upload = multer({ 
   dest: 'uploads/',
@@ -22,6 +25,8 @@ const upload = multer({
 });
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 const port = process.env.PORT || 3000;
 const DOMAIN = process.env.DOMAIN || 'localhost';
 
@@ -43,6 +48,342 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// API Routes
+// User search endpoint
+app.get('/api/search/users', async (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  const { q } = req.query;
+  if (!q || q.length < 2) {
+    return res.json([]);
+  }
+  
+  try {
+    const results = [];
+    
+    // Search local users
+    const allUsers = await db.get('users') || {};
+    for (const [username, user] of Object.entries(allUsers)) {
+      if (username.toLowerCase().includes(q.toLowerCase()) || 
+          (user.displayName && user.displayName.toLowerCase().includes(q.toLowerCase()))) {
+        results.push({
+          id: user.actor.id,
+          username: username,
+          name: user.displayName || username,
+          domain: 'Local user',
+          type: 'local'
+        });
+      }
+    }
+    
+    // Search federated users (WebFinger lookup)
+    if (q.includes('@') || q.includes('.')) {
+      try {
+        const federatedUser = await searchFederatedUser(q);
+        if (federatedUser) {
+          results.push(federatedUser);
+        }
+      } catch (error) {
+        console.error('Federated search error:', error);
+      }
+    }
+    
+    res.json(results.slice(0, 10)); // Limit to 10 results
+  } catch (error) {
+    console.error('User search error:', error);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// Like/dislike post endpoint
+app.post('/api/posts/react', async (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  const { postId, action } = req.body;
+  if (!postId || !['like', 'dislike'].includes(action)) {
+    return res.status(400).json({ error: 'Invalid request' });
+  }
+  
+  try {
+    const posts = await db.get('posts') || [];
+    const postIndex = posts.findIndex(p => p.id === postId);
+    
+    if (postIndex === -1) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    const post = posts[postIndex];
+    const userId = req.session.user.username;
+    
+    // Initialize reaction arrays if they don't exist
+    if (!post.likedBy) post.likedBy = [];
+    if (!post.dislikedBy) post.dislikedBy = [];
+    
+    // Remove existing reactions from this user
+    post.likedBy = post.likedBy.filter(u => u !== userId);
+    post.dislikedBy = post.dislikedBy.filter(u => u !== userId);
+    
+    // Add new reaction
+    if (action === 'like') {
+      post.likedBy.push(userId);
+    } else {
+      post.dislikedBy.push(userId);
+    }
+    
+    // Update counts
+    post.likes = post.likedBy.length;
+    post.dislikes = post.dislikedBy.length;
+    
+    // Calculate post score for sorting
+    post.score = post.likes - post.dislikes;
+    
+    posts[postIndex] = post;
+    await db.set('posts', posts);
+    
+    res.json({
+      likes: post.likes,
+      dislikes: post.dislikes,
+      score: post.score
+    });
+  } catch (error) {
+    console.error('Reaction error:', error);
+    res.status(500).json({ error: 'Failed to update reaction' });
+  }
+});
+
+// Follow user endpoint
+app.post('/api/follow', async (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID required' });
+  }
+  
+  try {
+    const currentUser = req.session.user.username;
+    
+    // Check if it's a local or remote user
+    const isLocal = userId.includes(`https://${DOMAIN}/u/`);
+    
+    if (isLocal) {
+      // Handle local follow
+      const targetUsername = userId.split('/u/')[1];
+      const targetUser = await db.get(`users.${targetUsername}`);
+      
+      if (!targetUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Add to local following list
+      const following = await db.get(`users.${currentUser}.following`) || [];
+      if (!following.includes(userId)) {
+        await db.push(`users.${currentUser}.following`, userId);
+      }
+      
+      // Add to target's followers
+      const followers = await db.get(`users.${targetUsername}.followers`) || [];
+      if (!followers.includes(`https://${DOMAIN}/u/${currentUser}`)) {
+        await db.push(`users.${targetUsername}.followers`, `https://${DOMAIN}/u/${currentUser}`);
+      }
+    } else {
+      // Handle federated follow
+      const followActivity = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: `https://${DOMAIN}/activities/${crypto.randomBytes(16).toString('hex')}`,
+        type: 'Follow',
+        actor: `https://${DOMAIN}/u/${currentUser}`,
+        object: userId,
+        published: new Date().toISOString()
+      };
+      
+      // Store the follow activity
+      await apex.store.saveActivity(followActivity);
+      
+      // Add to following list
+      const following = await db.get(`users.${currentUser}.following`) || [];
+      if (!following.includes(userId)) {
+        await db.push(`users.${currentUser}.following`, userId);
+      }
+      
+      // Send federated follow request
+      try {
+        await apex.net.activity.send(followActivity, currentUser);
+      } catch (federationError) {
+        console.error('Federation error:', federationError);
+        // Don't fail the whole request if federation fails
+      }
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Follow error:', error);
+    res.status(500).json({ error: 'Failed to follow user' });
+  }
+});
+
+// Reply to post endpoint
+app.post('/reply', async (req, res) => {
+  if (!req.session.user) {
+    return res.redirect('/login');
+  }
+  
+  const { postId, content } = req.body;
+  if (!postId || !content) {
+    return res.status(400).send('Post ID and content are required');
+  }
+  
+  try {
+    const posts = await db.get('posts') || [];
+    const parentPost = posts.find(p => p.id === postId);
+    
+    if (!parentPost) {
+      return res.status(404).send('Post not found');
+    }
+    
+    const replyId = crypto.randomBytes(16).toString('hex');
+    const reply = {
+      id: replyId,
+      author: req.session.user.username,
+      content,
+      createdAt: new Date().toISOString(),
+      replyTo: postId,
+      likes: 0,
+      dislikes: 0,
+      likedBy: [],
+      dislikedBy: [],
+      score: 0
+    };
+    
+    await db.push('posts', reply);
+    res.redirect('/');
+  } catch (error) {
+    console.error('Reply error:', error);
+    res.status(500).send('Failed to create reply');
+  }
+});
+
+// Helper function for federated user search
+async function searchFederatedUser(query) {
+  try {
+    let identifier = query;
+    
+    // Handle different input formats
+    if (!identifier.startsWith('http') && !identifier.includes('@')) {
+      return null; // Can't search without proper identifier
+    }
+    
+    if (identifier.includes('@') && !identifier.startsWith('http')) {
+      // WebFinger lookup
+      const [username, domain] = identifier.split('@').slice(-2);
+      if (!username || !domain) return null;
+      
+      const webfingerUrl = `https://${domain}/.well-known/webfinger?resource=acct:${username}@${domain}`;
+      
+      const response = await fetch(webfingerUrl, {
+        headers: {
+          'Accept': 'application/json'
+        },
+        timeout: 5000
+      });
+      
+      if (!response.ok) return null;
+      
+      const webfingerData = await response.json();
+      const actorLink = webfingerData.links?.find(link => 
+        link.rel === 'self' && link.type === 'application/activity+json'
+      );
+      
+      if (!actorLink) return null;
+      identifier = actorLink.href;
+    }
+    
+    // Fetch actor data
+    const actorResponse = await fetch(identifier, {
+      headers: {
+        'Accept': 'application/activity+json, application/ld+json; profile="https://www.w3.org/ns/activitystreams"'
+      },
+      timeout: 5000
+    });
+    
+    if (!actorResponse.ok) return null;
+    
+    const actorData = await actorResponse.json();
+    
+    return {
+      id: actorData.id,
+      username: actorData.preferredUsername,
+      name: actorData.name || actorData.preferredUsername,
+      domain: new URL(actorData.id).hostname,
+      type: 'federated',
+      summary: actorData.summary
+    };
+  } catch (error) {
+    console.error('Federated search error:', error);
+    return null;
+  }
+}
+
+// Bluesky bridge functionality
+async function bridgeToBluesky(username, post) {
+  const blueskySettings = await db.get(`users.${username}.blueskySettings`);
+  
+  if (!blueskySettings || !blueskySettings.enabled || !blueskySettings.handle || !blueskySettings.password) {
+    return; // Bridge not enabled or configured
+  }
+  
+  try {
+    const agent = new BskyAgent({ service: 'https://bsky.social' });
+    await agent.login({
+      identifier: blueskySettings.handle,
+      password: blueskySettings.password
+    });
+    
+    let postText = post.content;
+    
+    // Add source attribution
+    postText += `\n\n— Posted from MayaSpace`;
+    
+    // Create Bluesky post
+    const blueskyPost = {
+      text: postText,
+      createdAt: new Date().toISOString()
+    };
+    
+    // Handle media attachments (basic implementation)
+    if (post.attachment && post.attachment.mediaType.startsWith('image/')) {
+      try {
+        // For now, we'll skip image uploads as they require more complex handling
+        // In a production environment, you'd want to download the image and upload it to Bluesky
+        console.log('Image attachment detected but not yet supported for Bluesky bridge');
+      } catch (mediaError) {
+        console.error('Media upload to Bluesky failed:', mediaError);
+      }
+    }
+    
+    const result = await agent.post(blueskyPost);
+    console.log('Successfully bridged post to Bluesky:', result.uri);
+    
+    // Update the post with Bluesky URI for reference
+    const posts = await db.get('posts') || [];
+    const postIndex = posts.findIndex(p => p.id === post.id);
+    if (postIndex !== -1) {
+      posts[postIndex].blueskyUri = result.uri;
+      await db.set('posts', posts);
+    }
+    
+  } catch (error) {
+    console.error('Bluesky bridge error:', error);
+    throw error;
+  }
+}
 
 app.use(session({
     store: new SQLiteStore({ db: process.env.SESSIONS_DATABASE_PATH || 'sessions.sqlite', concurrentDB: true }),
@@ -104,9 +445,33 @@ app.use(
 // -- Routes --
 app.get('/', async (req, res) => {
     const posts = await db.get('posts') || [];
+    
+    // Initialize missing reaction data and calculate scores
+    const postsWithScores = posts.map(post => {
+        if (!post.likedBy) post.likedBy = [];
+        if (!post.dislikedBy) post.dislikedBy = [];
+        if (typeof post.likes !== 'number') post.likes = post.likedBy.length;
+        if (typeof post.dislikes !== 'number') post.dislikes = post.dislikedBy.length;
+        if (typeof post.score !== 'number') post.score = post.likes - post.dislikes;
+        return post;
+    });
+    
+    // Sort posts by score (likes - dislikes) first, then by creation time
+    // Higher score means higher position
+    const sortedPosts = postsWithScores
+        .filter(post => !post.replyTo) // Only show top-level posts on home
+        .sort((a, b) => {
+            // Primary sort: by score (likes - dislikes)
+            const scoreDiff = b.score - a.score;
+            if (scoreDiff !== 0) return scoreDiff;
+            
+            // Secondary sort: by creation time (newest first)
+            return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+    
     res.render('home', { 
         title: 'Welcome to MayaSpace',
-        posts: posts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        posts: sortedPosts
     });
 });
 
@@ -195,6 +560,14 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
   }
   
   await db.push('posts', post);
+
+  // Bridge to Bluesky if enabled
+  try {
+    await bridgeToBluesky(req.session.user.username, post);
+  } catch (error) {
+    console.error('Bluesky bridge error:', error);
+    // Don't fail the post if Bluesky bridge fails
+  }
 
   // Federate post
   if (process.env.APEX_DOMAIN) {
@@ -299,12 +672,13 @@ app.post('/login', async (req, res) => {
 app.get('/settings', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
     const user = await db.get(`users.${req.session.user.username}`);
-    res.render('settings', { title: 'Settings', user });
+    const blueskySettings = await db.get(`users.${req.session.user.username}.blueskySettings`) || {};
+    res.render('settings', { title: 'Settings', user, blueskySettings });
 });
 
 app.post('/settings', async (req, res) => {
     if (!req.session.user) return res.status(401).send('Unauthorized');
-    const { displayName, bio, customCss } = req.body;
+    const { displayName, bio, customCss, blueskyHandle, blueskyPassword, enableBlueskyBridge } = req.body;
     const { username } = req.session.user;
 
     const sanitizedCss = sanitizeHtml(customCss, {
@@ -329,6 +703,33 @@ app.post('/settings', async (req, res) => {
     await db.set(`users.${username}.displayName`, displayName);
     await db.set(`users.${username}.bio`, bio);
     await db.set(`users.${username}.customCss`, sanitizedCss);
+
+    // Handle Bluesky settings
+    if (blueskyHandle || blueskyPassword || enableBlueskyBridge !== undefined) {
+        const blueskySettings = {
+            handle: blueskyHandle || '',
+            password: blueskyPassword || '',
+            enabled: enableBlueskyBridge === 'on'
+        };
+        
+        // Test Bluesky connection if credentials provided
+        if (blueskySettings.enabled && blueskySettings.handle && blueskySettings.password) {
+            try {
+                const agent = new BskyAgent({ service: 'https://bsky.social' });
+                await agent.login({
+                    identifier: blueskySettings.handle,
+                    password: blueskySettings.password
+                });
+                blueskySettings.connected = true;
+            } catch (error) {
+                console.error('Bluesky connection test failed:', error);
+                blueskySettings.connected = false;
+                blueskySettings.error = 'Failed to connect to Bluesky. Please check your credentials.';
+            }
+        }
+        
+        await db.set(`users.${username}.blueskySettings`, blueskySettings);
+    }
 
     const actorId = req.session.user.id;
     const actor = await apex.store.getObject(actorId);
@@ -418,7 +819,61 @@ app.get('/posts/:id', (req, res) => {
 
 });
 
+// Chat routes
+app.get('/chat', async (req, res) => {
+    if (!req.session.user) {
+        return res.redirect('/login');
+    }
+    
+    // Get recent chat messages
+    const messages = await db.get('chat_messages') || [];
+    const recentMessages = messages.slice(-50); // Last 50 messages
+    
+    res.render('chat', {
+        title: 'Chat',
+        messages: recentMessages
+    });
+});
+
+// Socket.io for real-time chat
+io.on('connection', (socket) => {
+    console.log('User connected to chat');
+    
+    socket.on('join', (userData) => {
+        socket.userData = userData;
+        socket.join('global_chat');
+        socket.broadcast.to('global_chat').emit('user_joined', userData.username);
+    });
+    
+    socket.on('send_message', async (data) => {
+        if (!socket.userData) return;
+        
+        const message = {
+            id: crypto.randomBytes(16).toString('hex'),
+            author: socket.userData.username,
+            content: sanitizeHtml(data.content, {
+                allowedTags: [],
+                allowedAttributes: {}
+            }),
+            timestamp: new Date().toISOString()
+        };
+        
+        // Save to database
+        await db.push('chat_messages', message);
+        
+        // Broadcast to all users
+        io.to('global_chat').emit('new_message', message);
+    });
+    
+    socket.on('disconnect', () => {
+        if (socket.userData) {
+            socket.broadcast.to('global_chat').emit('user_left', socket.userData.username);
+        }
+        console.log('User disconnected from chat');
+    });
+});
+
 // -- Server --
-app.listen(port, () => {
+server.listen(port, () => {
     console.log(`MayaSpace is listening on port ${port}`);
 });

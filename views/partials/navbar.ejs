@@ -1,12 +1,24 @@
 <nav>
-    <a href="/"><img id="site-logo" src="/logos/normal.png" alt="MayaSpace Logo" style="height: 30px; vertical-align: middle;"></a>
-    <a href="/">Home</a>
-    <% if (typeof sessionUser !== 'undefined' && sessionUser) { %>
-        <a href="/u/<%= sessionUser.username %>">My Profile</a>
-        <a href="/logout">Logout</a>
-    <% } else { %>
-        <a href="/login">Login</a>
-        <a href="/register">Register</a>
-    <% } %>
-</nav>
-<hr> 
+    <div class="nav-content">
+        <a href="/" class="nav-brand">
+            <img id="site-logo" src="/logos/normal.png" alt="MayaSpace Logo" style="height: 30px;">
+            MayaSpace
+        </a>
+        
+                    <div class="nav-links">
+                <a href="/">Home</a>
+                <% if (typeof sessionUser !== 'undefined' && sessionUser) { %>
+                    <a href="/chat">Chat</a>
+                    <a href="/u/<%= sessionUser.username %>">My Profile</a>
+                    <a href="/settings">Settings</a>
+                    <a href="/logout">Logout</a>
+                <% } else { %>
+                    <a href="/login">Login</a>
+                    <a href="/register">Register</a>
+                <% } %>
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+                    🌙
+                </button>
+            </div>
+    </div>
+</nav> 

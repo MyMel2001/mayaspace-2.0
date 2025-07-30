@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,35 +9,234 @@
 </head>
 <body>
     <%- include('partials/navbar') %>
-    <h1>Welcome to MayaSpace</h1>
+    
+    <main>
+        <div class="container">
+            <h1>Welcome to MayaSpace</h1>
 
-    <% if (sessionUser) { %>
-    <h3>Create a new post</h3>
-    <form action="/new-post" method="POST" enctype="multipart/form-data">
-        <textarea name="content" rows="4" cols="50" required></textarea><br>
-        <input type="file" name="media">
-        <button type="submit">Post</button>
-    </form>
-    <% } %>
+            <% if (sessionUser) { %>
+            <!-- User Search Section -->
+            <div class="card">
+                <h3>Find Users</h3>
+                <div class="search-container">
+                    <div class="search-icon">🔍</div>
+                    <input type="text" class="search-input" id="userSearch" placeholder="Search for users on MayaSpace, Mastodon, and other ActivityPub networks...">
+                    <div id="searchResults" class="search-results hidden"></div>
+                </div>
+            </div>
 
-    <h2>Recent Posts</h2>
-    <% posts.forEach(post => { %>
-        <div>
-            <p>
-                <strong><a href="/u/<%= post.author %>"><%= post.author %></a></strong>
-                <small><%= new Date(post.createdAt).toLocaleString() %></small>
-            </p>
-            <p><%= post.content %></p>
-            <% if (post.attachment) { %>
-                <% if (post.attachment.mediaType.startsWith('image/')) { %>
-                    <img src="<%= post.attachment.url.replace('https://' + DOMAIN, '') %>" alt="User upload" style="max-width: 500px; max-height: 500px;">
-                <% } else if (post.attachment.mediaType.startsWith('video/')) { %>
-                    <video src="<%= post.attachment.url.replace('https://' + DOMAIN, '') %>" controls style="max-width: 500px; max-height: 500px;"></video>
-                <% } %>
+            <!-- Post Creation Form -->
+            <div class="post-form">
+                <h3>Create a new post</h3>
+                <form action="/new-post" method="POST" enctype="multipart/form-data">
+                    <textarea name="content" placeholder="What's happening?" required></textarea>
+                    <div class="post-form-actions">
+                        <div class="file-input">
+                            <input type="file" name="media" id="mediaInput">
+                            <button type="button" class="btn btn-secondary">📎 Attach Media</button>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Post</button>
+                    </div>
+                </form>
+            </div>
             <% } %>
-        </div>
-        <hr>
-    <% }) %>
 
+            <!-- Posts Section -->
+            <section>
+                <h2>Recent Posts</h2>
+                <% posts.forEach(post => { %>
+                    <article class="post" data-post-id="<%= post.id %>">
+                        <div class="post-header">
+                            <div class="post-author">
+                                <a href="/u/<%= post.author %>"><%= post.author %></a>
+                                <span class="post-time"><%= new Date(post.createdAt).toLocaleString() %></span>
+                            </div>
+                        </div>
+                        
+                        <div class="post-content">
+                            <%= post.content %>
+                        </div>
+                        
+                        <% if (post.attachment) { %>
+                            <div class="post-media">
+                                <% if (post.attachment.mediaType.startsWith('image/')) { %>
+                                    <img src="<%= post.attachment.url.replace('https://' + DOMAIN, '') %>" alt="User upload">
+                                <% } else if (post.attachment.mediaType.startsWith('video/')) { %>
+                                    <video src="<%= post.attachment.url.replace('https://' + DOMAIN, '') %>" controls></video>
+                                <% } %>
+                            </div>
+                        <% } %>
+                        
+                        <% if (sessionUser) { %>
+                        <div class="post-actions">
+                            <button class="post-action like-btn" data-action="like">
+                                <span>👍</span>
+                                <span class="like-count"><%= post.likes || 0 %></span>
+                            </button>
+                            <button class="post-action dislike-btn" data-action="dislike">
+                                <span>👎</span>
+                                <span class="dislike-count"><%= post.dislikes || 0 %></span>
+                            </button>
+                            <button class="post-action" onclick="toggleReply('<%= post.id %>')">
+                                <span>💬</span>
+                                <span>Reply</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Reply form (initially hidden) -->
+                        <div id="reply-<%= post.id %>" class="reply-form hidden">
+                            <form action="/reply" method="POST">
+                                <input type="hidden" name="postId" value="<%= post.id %>">
+                                <textarea name="content" placeholder="Write a reply..." rows="3"></textarea>
+                                <button type="submit" class="btn btn-primary btn-sm">Reply</button>
+                            </form>
+                        </div>
+                        <% } %>
+                    </article>
+                <% }) %>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        // Dark mode toggle functionality
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+
+        // User search functionality
+        const userSearch = document.getElementById('userSearch');
+        const searchResults = document.getElementById('searchResults');
+        
+        if (userSearch) {
+            let searchTimeout;
+            userSearch.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                const query = this.value.trim();
+                
+                if (query.length < 2) {
+                    searchResults.classList.add('hidden');
+                    return;
+                }
+                
+                searchTimeout = setTimeout(() => {
+                    searchUsers(query);
+                }, 300);
+            });
+        }
+        
+        async function searchUsers(query) {
+            try {
+                const response = await fetch(`/api/search/users?q=${encodeURIComponent(query)}`);
+                const users = await response.json();
+                displaySearchResults(users);
+            } catch (error) {
+                console.error('Search error:', error);
+            }
+        }
+        
+        function displaySearchResults(users) {
+            if (users.length === 0) {
+                searchResults.classList.add('hidden');
+                return;
+            }
+            
+            searchResults.innerHTML = users.map(user => `
+                <div class="search-result" onclick="followUser('${user.id}')">
+                    <div>
+                        <strong>${user.name || user.username}</strong>
+                        <div style="font-size: 0.875rem; color: var(--text-muted);">${user.domain || 'Local user'}</div>
+                    </div>
+                </div>
+            `).join('');
+            
+            searchResults.classList.remove('hidden');
+        }
+        
+        // Like/dislike functionality
+        document.addEventListener('click', async function(e) {
+            if (e.target.closest('.like-btn, .dislike-btn')) {
+                const button = e.target.closest('.post-action');
+                const action = button.dataset.action;
+                const postId = button.closest('.post').dataset.postId;
+                
+                try {
+                    const response = await fetch('/api/posts/react', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ postId, action })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        updateReactionCounts(postId, result);
+                    }
+                } catch (error) {
+                    console.error('Reaction error:', error);
+                }
+            }
+        });
+        
+        function updateReactionCounts(postId, data) {
+            const post = document.querySelector(`[data-post-id="${postId}"]`);
+            const likeCount = post.querySelector('.like-count');
+            const dislikeCount = post.querySelector('.dislike-count');
+            
+            if (likeCount) likeCount.textContent = data.likes || 0;
+            if (dislikeCount) dislikeCount.textContent = data.dislikes || 0;
+        }
+        
+        function toggleReply(postId) {
+            const replyForm = document.getElementById(`reply-${postId}`);
+            replyForm.classList.toggle('hidden');
+        }
+        
+        async function followUser(userId) {
+            try {
+                const response = await fetch('/api/follow', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ userId })
+                });
+                
+                if (response.ok) {
+                    alert('Follow request sent!');
+                    searchResults.classList.add('hidden');
+                    userSearch.value = '';
+                }
+            } catch (error) {
+                console.error('Follow error:', error);
+            }
+        }
+        
+        // File input styling
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('mediaInput');
+            const fileButton = fileInput?.nextElementSibling;
+            
+            if (fileInput && fileButton) {
+                fileInput.addEventListener('change', function() {
+                    const fileName = this.files[0]?.name;
+                    if (fileName) {
+                        fileButton.textContent = `📎 ${fileName}`;
+                    } else {
+                        fileButton.textContent = '📎 Attach Media';
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html> 

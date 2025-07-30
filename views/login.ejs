@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,18 +9,47 @@
 </head>
 <body>
     <%- include('partials/navbar') %>
-    <h1>Login to MayaSpace</h1>
-    <form action="/login" method="POST">
-        <div>
-            <label for="username">Username</label>
-            <input type="text" id="username" name="username" required>
+    
+    <main>
+        <div class="form-container">
+            <h1>Login</h1>
+            
+            <form action="/login" method="POST">
+                <div class="form-group">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" id="username" name="username" class="form-input" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" id="password" name="password" class="form-input" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+            </form>
+            
+            <div class="text-center mt-4">
+                <p style="color: var(--text-muted);">
+                    Don't have an account? 
+                    <a href="/register" style="color: var(--accent-primary); text-decoration: none;">Register here</a>
+                </p>
+            </div>
         </div>
-        <div>
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" required>
-        </div>
-        <button type="submit">Login</button>
-    </form>
-    <p>Don't have an account? <a href="/register">Register</a></p>
+    </main>
+    
+    <script>
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Dark mode toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+    </script>
 </body>
 </html> 

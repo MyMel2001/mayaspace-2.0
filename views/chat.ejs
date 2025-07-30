@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/js/aprilfools.js" defer></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <%- include('partials/navbar') %>
+    
+    <main>
+        <div class="container">
+            <h1>Chat</h1>
+            
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages">
+                    <% messages.forEach(message => { %>
+                        <div class="chat-message">
+                            <div class="chat-message-header">
+                                <strong><%= message.author %></strong>
+                                <span class="chat-time"><%= new Date(message.timestamp).toLocaleTimeString() %></span>
+                            </div>
+                            <div class="chat-message-content"><%= message.content %></div>
+                        </div>
+                    <% }) %>
+                </div>
+                
+                <div class="chat-input-container">
+                    <input type="text" id="chatInput" class="chat-input" placeholder="Type your message..." maxlength="500">
+                    <button id="sendButton" class="btn btn-primary">Send</button>
+                </div>
+            </div>
+            
+            <div class="chat-users">
+                <h3>Online Users</h3>
+                <div id="onlineUsers" class="online-users-list"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Initialize socket connection
+        const socket = io();
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const sendButton = document.getElementById('sendButton');
+        const onlineUsers = document.getElementById('onlineUsers');
+        
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Dark mode toggle (same as home page)
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+        
+        // Join chat room
+        socket.emit('join', {
+            username: '<%= sessionUser.username %>'
+        });
+        
+        // Handle new messages
+        socket.on('new_message', (message) => {
+            addMessage(message);
+            scrollToBottom();
+        });
+        
+        // Handle user join/leave notifications
+        socket.on('user_joined', (username) => {
+            addSystemMessage(`${username} joined the chat`);
+        });
+        
+        socket.on('user_left', (username) => {
+            addSystemMessage(`${username} left the chat`);
+        });
+        
+        function addMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            
+            const timestamp = new Date(message.timestamp).toLocaleTimeString();
+            messageDiv.innerHTML = `
+                <div class="chat-message-header">
+                    <strong>${message.author}</strong>
+                    <span class="chat-time">${timestamp}</span>
+                </div>
+                <div class="chat-message-content">${message.content}</div>
+            `;
+            
+            chatMessages.appendChild(messageDiv);
+        }
+        
+        function addSystemMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message system-message';
+            messageDiv.innerHTML = `
+                <div class="chat-message-content" style="font-style: italic; color: var(--text-muted);">
+                    ${text}
+                </div>
+            `;
+            chatMessages.appendChild(messageDiv);
+        }
+        
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function sendMessage() {
+            const content = chatInput.value.trim();
+            if (!content) return;
+            
+            socket.emit('send_message', { content });
+            chatInput.value = '';
+        }
+        
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // Auto-scroll to bottom on page load
+        scrollToBottom();
+        
+        // Prevent form submission on enter
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+    
+    <style>
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 1rem;
+            background-color: var(--bg-secondary);
+        }
+        
+        .chat-message {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background-color: var(--bg-primary);
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+        }
+        
+        .chat-message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .chat-time {
+            color: var(--text-muted);
+        }
+        
+        .chat-message-content {
+            color: var(--text-primary);
+            word-wrap: break-word;
+        }
+        
+        .system-message {
+            background-color: transparent;
+            border: none;
+            text-align: center;
+        }
+        
+        .chat-input-container {
+            display: flex;
+            gap: 0.5rem;
+            padding: 1rem;
+            background-color: var(--bg-primary);
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            font-family: inherit;
+        }
+        
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
+        }
+        
+        .chat-users {
+            margin-top: 2rem;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+        }
+        
+        .online-users-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .online-user {
+            padding: 0.25rem 0.75rem;
+            background-color: var(--bg-tertiary);
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .chat-container {
+                margin: 0 -0.5rem;
+            }
+            
+            .chat-messages {
+                height: 300px;
+            }
+        }
+    </style>
+</body>
+</html> 

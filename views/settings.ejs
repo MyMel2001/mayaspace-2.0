@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,23 +9,194 @@
 </head>
 <body>
     <%- include('partials/navbar') %>
-
-    <h1>Settings</h1>
-
-    <form action="/settings" method="POST">
-        <div>
-            <label for="displayName">Display Name</label>
-            <input type="text" id="displayName" name="displayName" value="<%= user.displayName || '' %>">
+    
+    <main>
+        <div class="container">
+            <h1>Settings</h1>
+            
+            <div class="form-container" style="max-width: 600px;">
+                <form action="/settings" method="POST">
+                    <!-- Profile Settings -->
+                    <div class="settings-section">
+                        <h2>Profile Settings</h2>
+                        
+                        <div class="form-group">
+                            <label for="displayName" class="form-label">Display Name</label>
+                            <input type="text" id="displayName" name="displayName" class="form-input" 
+                                   value="<%= user.displayName || '' %>" placeholder="Your display name">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="bio" class="form-label">Bio</label>
+                            <textarea id="bio" name="bio" class="form-input" rows="4" 
+                                      placeholder="Tell us about yourself..."><%= user.bio || '' %></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="customCss" class="form-label">Custom CSS</label>
+                            <textarea id="customCss" name="customCss" class="form-input" rows="6" 
+                                      placeholder="Add custom CSS for your profile..."><%= user.customCss || '' %></textarea>
+                            <small style="color: var(--text-muted);">Only safe CSS properties are allowed.</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Bluesky Bridge Settings -->
+                    <div class="settings-section">
+                        <h2>Bluesky Bridge</h2>
+                        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                            Cross-post your MayaSpace posts to Bluesky automatically.
+                        </p>
+                        
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="enableBlueskyBridge" 
+                                       <%= blueskySettings.enabled ? 'checked' : '' %>>
+                                Enable Bluesky Bridge
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="blueskyHandle" class="form-label">Bluesky Handle</label>
+                            <input type="text" id="blueskyHandle" name="blueskyHandle" class="form-input" 
+                                   value="<%= blueskySettings.handle || '' %>" 
+                                   placeholder="your-handle.bsky.social">
+                            <small style="color: var(--text-muted);">Your Bluesky handle or email</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="blueskyPassword" class="form-label">App Password</label>
+                            <input type="password" id="blueskyPassword" name="blueskyPassword" class="form-input" 
+                                   value="<%= blueskySettings.password || '' %>" 
+                                   placeholder="Create an app password in Bluesky settings">
+                            <small style="color: var(--text-muted);">
+                                Use an app password, not your main password. 
+                                <a href="https://bsky.app/settings/app-passwords" target="_blank" style="color: var(--accent-primary);">
+                                    Create one here
+                                </a>
+                            </small>
+                        </div>
+                        
+                        <% if (blueskySettings.error) { %>
+                            <div class="alert alert-error">
+                                <%= blueskySettings.error %>
+                            </div>
+                        <% } %>
+                        
+                        <% if (blueskySettings.connected) { %>
+                            <div class="alert alert-success">
+                                ✅ Successfully connected to Bluesky!
+                            </div>
+                        <% } %>
+                    </div>
+                    
+                    <!-- Federation Settings -->
+                    <div class="settings-section">
+                        <h2>Federation Settings</h2>
+                        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                            Your ActivityPub information for federation with Mastodon and other compatible platforms.
+                        </p>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Your ActivityPub ID</label>
+                            <input type="text" class="form-input" readonly 
+                                   value="@<%= user.username %>@<%= DOMAIN %>">
+                            <small style="color: var(--text-muted);">Share this to let others follow you from other platforms</small>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </form>
+            </div>
         </div>
-        <div>
-            <label for="bio">Bio</label>
-            <textarea id="bio" name="bio"><%= user.bio || '' %></textarea>
-        </div>
-        <div>
-            <label for="customCss">Custom Profile CSS</label>
-            <textarea id="customCss" name="customCss" rows="10"><%= user.customCss || '' %></textarea>
-        </div>
-        <button type="submit">Save</button>
-    </form>
+    </main>
+    
+    <script>
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        
+        // Dark mode toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+    </script>
+    
+    <style>
+        .settings-section {
+            margin-bottom: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .settings-section:last-of-type {
+            border-bottom: none;
+        }
+        
+        .settings-section h2 {
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            color: var(--text-primary);
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            width: 1.25rem;
+            height: 1.25rem;
+            accent-color: var(--accent-primary);
+        }
+        
+        .alert {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+        }
+        
+        .alert-error {
+            background-color: rgb(254 242 242);
+            border: 1px solid rgb(252 165 165);
+            color: rgb(185 28 28);
+        }
+        
+        .alert-success {
+            background-color: rgb(240 253 244);
+            border: 1px solid rgb(167 243 208);
+            color: rgb(21 128 61);
+        }
+        
+        [data-theme="dark"] .alert-error {
+            background-color: rgb(69 26 26);
+            border: 1px solid rgb(127 29 29);
+            color: rgb(248 113 113);
+        }
+        
+        [data-theme="dark"] .alert-success {
+            background-color: rgb(20 83 45);
+            border: 1px solid rgb(34 197 94);
+            color: rgb(74 222 128);
+        }
+        
+        textarea.form-input {
+            min-height: 120px;
+            resize: vertical;
+        }
+        
+        small {
+            display: block;
+            margin-top: 0.5rem;
+        }
+    </style>
 </body>
 </html> 
