@@ -718,6 +718,11 @@ app.post('/settings', async (req, res) => {
 
     // Handle Bluesky settings
     if (blueskyHandle || blueskyPassword || enableBlueskyBridge !== undefined) {
+        console.log('=== BLUESKY SETTINGS UPDATE ===');
+        console.log('Handle:', blueskyHandle);
+        console.log('Password length:', blueskyPassword ? blueskyPassword.length : 0);
+        console.log('Bridge enabled:', enableBlueskyBridge === 'on');
+        
         const blueskySettings = {
             handle: blueskyHandle || '',
             password: blueskyPassword || '',
@@ -726,6 +731,7 @@ app.post('/settings', async (req, res) => {
         
         // Test Bluesky connection if credentials provided
         if (blueskySettings.enabled && blueskySettings.handle && blueskySettings.password) {
+            console.log('=== TESTING BLUESKY CONNECTION ===');
             try {
                 console.log('Testing Bluesky connection for:', blueskySettings.handle);
                 const agent = new BskyAgent({ service: 'https://bsky.social' });
@@ -757,15 +763,19 @@ app.post('/settings', async (req, res) => {
                     blueskySettings.error = `Connection failed: ${error.message || 'Unknown error'}. Please try again.`;
                 }
                 
-                console.error('Detailed error:', {
-                    message: error.message,
-                    status: error.status,
-                    code: error.code,
-                    stack: error.stack
-                });
+                console.error('=== DETAILED BLUESKY ERROR ===');
+                console.error('Error message:', error.message);
+                console.error('Error status:', error.status);
+                console.error('Error code:', error.code);
+                console.error('Full error object:', error);
+                console.error('Error stack:', error.stack);
+                console.error('=== END ERROR DETAILS ===');
             }
+        } else {
+            console.log('Skipping Bluesky connection test - missing credentials or disabled');
         }
         
+        console.log('Saving Bluesky settings:', blueskySettings);
         await db.set(`users.${username}.blueskySettings`, blueskySettings);
     }
 
