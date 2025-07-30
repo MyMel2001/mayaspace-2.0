@@ -76,6 +76,17 @@
                             </small>
                         </div>
                         
+                        <div class="troubleshooting-tips">
+                            <h4>Troubleshooting Tips:</h4>
+                            <ul style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem;">
+                                <li>Use your <strong>handle</strong> (e.g., "username.bsky.social"), not your email</li>
+                                <li>Create an <strong>app password</strong> in Bluesky settings, don't use your main password</li>
+                                <li>Make sure your Bluesky account is not restricted or suspended</li>
+                                <li>Check that you have a stable internet connection</li>
+                                <li>Try again in a few minutes if you see a rate limit error</li>
+                            </ul>
+                        </div>
+                        
                         <% if (blueskySettings.error) { %>
                             <div class="alert alert-error">
                                 <%= blueskySettings.error %>
@@ -196,6 +207,29 @@
         small {
             display: block;
             margin-top: 0.5rem;
+        }
+        
+        .troubleshooting-tips {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: var(--bg-tertiary);
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+        }
+        
+        .troubleshooting-tips h4 {
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+        
+        .troubleshooting-tips ul {
+            margin: 0;
+            padding-left: 1.5rem;
+        }
+        
+        .troubleshooting-tips li {
+            margin-bottom: 0.5rem;
         }
     </style>
 </body>

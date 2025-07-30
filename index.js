@@ -349,11 +349,15 @@ async function bridgeToBluesky(username, post) {
   }
   
   try {
+    console.log('Bridging post to Bluesky for user:', username);
     const agent = new BskyAgent({ service: 'https://bsky.social' });
-    await agent.login({
+    
+    const loginResult = await agent.login({
       identifier: blueskySettings.handle,
       password: blueskySettings.password
     });
+    
+    console.log('Bluesky bridge login successful for:', blueskySettings.handle);
     
     let postText = post.content;
     
@@ -389,7 +393,12 @@ async function bridgeToBluesky(username, post) {
     }
     
   } catch (error) {
-    console.error('Bluesky bridge error:', error);
+    console.error('Bluesky bridge error for user', username, ':', error);
+    console.error('Error details:', {
+      message: error.message,
+      status: error.status,
+      code: error.code
+    });
     throw error;
   }
 }
@@ -718,16 +727,42 @@ app.post('/settings', async (req, res) => {
         // Test Bluesky connection if credentials provided
         if (blueskySettings.enabled && blueskySettings.handle && blueskySettings.password) {
             try {
+                console.log('Testing Bluesky connection for:', blueskySettings.handle);
                 const agent = new BskyAgent({ service: 'https://bsky.social' });
-                await agent.login({
+                
+                const loginResult = await agent.login({
                     identifier: blueskySettings.handle,
                     password: blueskySettings.password
                 });
+                
+                console.log('Bluesky login successful:', loginResult.success);
                 blueskySettings.connected = true;
+                blueskySettings.error = null;
             } catch (error) {
                 console.error('Bluesky connection test failed:', error);
                 blueskySettings.connected = false;
-                blueskySettings.error = 'Failed to connect to Bluesky. Please check your credentials.';
+                
+                // Provide more specific error messages
+                if (error.message.includes('Invalid identifier or password')) {
+                    blueskySettings.error = 'Invalid Bluesky handle or app password. Please check your credentials.';
+                } else if (error.message.includes('network') || error.code === 'ENOTFOUND') {
+                    blueskySettings.error = 'Network error connecting to Bluesky. Please check your internet connection.';
+                } else if (error.message.includes('rate limit') || error.status === 429) {
+                    blueskySettings.error = 'Rate limited by Bluesky. Please try again later.';
+                } else if (error.message.includes('InvalidRequest')) {
+                    blueskySettings.error = 'Invalid request format. Please make sure you\'re using your handle (not email) and an app password.';
+                } else if (error.status === 401 || error.status === 403) {
+                    blueskySettings.error = 'Authentication failed. Please verify your handle and app password are correct.';
+                } else {
+                    blueskySettings.error = `Connection failed: ${error.message || 'Unknown error'}. Please try again.`;
+                }
+                
+                console.error('Detailed error:', {
+                    message: error.message,
+                    status: error.status,
+                    code: error.code,
+                    stack: error.stack
+                });
             }
         }
         
