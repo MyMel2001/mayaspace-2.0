@@ -32,6 +32,10 @@
                     <small style="color: var(--text-muted);">At least 6 characters long</small>
                 </div>
                 
+                <div class="form-group">
+                    <%- include('partials/captcha', { id: 'register-captcha', size: 'large', context: 'register', question: captcha }) %>
+                </div>
+                
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Create Account</button>
             </form>
             

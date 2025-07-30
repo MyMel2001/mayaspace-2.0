@@ -17,6 +17,41 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { BskyAgent } = require('@atproto/api');
 
+// Simple captcha system
+function generateCaptcha() {
+  const operations = ['+', '-', '*'];
+  const operation = operations[Math.floor(Math.random() * operations.length)];
+  
+  let num1, num2, answer;
+  
+  switch (operation) {
+    case '+':
+      num1 = Math.floor(Math.random() * 50) + 1;
+      num2 = Math.floor(Math.random() * 50) + 1;
+      answer = num1 + num2;
+      break;
+    case '-':
+      num1 = Math.floor(Math.random() * 50) + 20; // Ensure positive result
+      num2 = Math.floor(Math.random() * (num1 - 1)) + 1;
+      answer = num1 - num2;
+      break;
+    case '*':
+      num1 = Math.floor(Math.random() * 12) + 1;
+      num2 = Math.floor(Math.random() * 12) + 1;
+      answer = num1 * num2;
+      break;
+  }
+  
+  return {
+    question: `${num1} ${operation} ${num2} = ?`,
+    answer: answer
+  };
+}
+
+function verifyCaptcha(userAnswer, correctAnswer) {
+  return parseInt(userAnswer) === parseInt(correctAnswer);
+}
+
 const upload = multer({ 
   dest: 'uploads/',
   limits: {
@@ -244,7 +279,15 @@ app.post('/reply', async (req, res) => {
     return res.redirect('/login');
   }
   
-  const { postId, content } = req.body;
+  const { postId, content, captcha } = req.body;
+  
+  // Verify captcha
+  if (!verifyCaptcha(captcha, req.session.captchaAnswer)) {
+    return res.status(400).send('Invalid captcha. Please try again.');
+  }
+  
+  // Clear captcha from session after use
+  delete req.session.captchaAnswer;
   if (!postId || !content) {
     return res.status(400).send('Post ID and content are required');
   }
@@ -552,6 +595,110 @@ app.use(
   apex
 );
 
+// Captcha endpoint with canvas image
+app.get('/api/captcha', (req, res) => {
+  const captcha = generateCaptcha();
+  req.session.captchaAnswer = captcha.answer;
+  
+  // Generate canvas-based captcha image
+  const captchaImage = generateCaptchaImage(captcha.question);
+  
+  res.json({ 
+    question: captcha.question,
+    image: captchaImage 
+  });
+});
+
+// Generate captcha image with canvas
+function generateCaptchaImage(text) {
+  // Use node-canvas simulation (we'll create a base64 data URL)
+  const width = 200;
+  const height = 80;
+  
+  // Create SVG-based captcha (works without node-canvas dependency)
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'];
+  const randomColor = () => colors[Math.floor(Math.random() * colors.length)];
+  
+  // Generate random lines
+  let lines = '';
+  for (let i = 0; i < 5; i++) {
+    const x1 = Math.random() * width;
+    const y1 = Math.random() * height;
+    const x2 = Math.random() * width;
+    const y2 = Math.random() * height;
+    const color = randomColor();
+    const strokeWidth = Math.random() * 3 + 1;
+    
+    lines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${strokeWidth}" opacity="0.7"/>`;
+  }
+  
+  // Generate random circles/dots
+  let circles = '';
+  for (let i = 0; i < 8; i++) {
+    const cx = Math.random() * width;
+    const cy = Math.random() * height;
+    const r = Math.random() * 8 + 2;
+    const color = randomColor();
+    
+    circles += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" opacity="0.4"/>`;
+  }
+  
+  // Create distorted text effect
+  const characters = text.split('');
+  let textElements = '';
+  let currentX = 20;
+  
+  characters.forEach((char, index) => {
+    const fontSize = 24 + Math.random() * 8; // 24-32px
+    const rotation = (Math.random() - 0.5) * 30; // -15 to +15 degrees
+    const yOffset = Math.random() * 10 - 5; // -5 to +5px vertical offset
+    const color = '#2c3e50'; // Dark color for readability
+    
+    textElements += `
+      <text x="${currentX}" y="${40 + yOffset}" 
+            font-family="Comic Sans MS, Chalkduster, fantasy" 
+            font-size="${fontSize}" 
+            fill="${color}" 
+            font-weight="bold"
+            transform="rotate(${rotation} ${currentX} ${40 + yOffset})">
+        ${char}
+      </text>`;
+    
+    currentX += fontSize * 0.7; // Space characters
+  });
+  
+  const svg = `
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="roughpaper" x="0%" y="0%" width="100%" height="100%">
+          <feTurbulence baseFrequency="0.04" numOctaves="5" result="noise" seed="1"/>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="1"/>
+        </filter>
+      </defs>
+      
+      <!-- Background with slight texture -->
+      <rect width="100%" height="100%" fill="#f8f9fa" filter="url(#roughpaper)"/>
+      
+      <!-- Background lines -->
+      ${lines}
+      
+      <!-- Background circles -->
+      ${circles}
+      
+      <!-- Text -->
+      ${textElements}
+      
+      <!-- Overlay lines (on top of text) -->
+      <line x1="0" y1="${Math.random() * height}" x2="${width}" y2="${Math.random() * height}" stroke="${randomColor()}" stroke-width="2" opacity="0.3"/>
+      <line x1="${Math.random() * width}" y1="0" x2="${Math.random() * width}" y2="${height}" stroke="${randomColor()}" stroke-width="2" opacity="0.3"/>
+    </svg>
+  `;
+  
+  // Convert SVG to base64 data URL
+  const base64 = Buffer.from(svg).toString('base64');
+  return `data:image/svg+xml;base64,${base64}`;
+}
+
 // -- Routes --
 app.get('/', async (req, res) => {
     const posts = await db.get('posts') || [];
@@ -605,7 +752,15 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
     return res.redirect('/login');
   }
 
-  const { content } = req.body;
+  const { content, captcha } = req.body;
+  
+  // Verify captcha
+  if (!verifyCaptcha(captcha, req.session.captchaAnswer)) {
+    return res.status(400).send('Invalid captcha. Please try again.');
+  }
+  
+  // Clear captcha from session after use
+  delete req.session.captchaAnswer;
   if (!content) {
     return res.status(400).send('Content is required');
   }
@@ -742,11 +897,21 @@ app.post('/new-post', upload.single('media'), async (req, res) => {
 
 app.get('/register', (req, res) => {
     if (req.session.user) return res.redirect('/');
-    res.render('register', { title: 'Register' });
+    const captcha = generateCaptcha();
+    req.session.captchaAnswer = captcha.answer;
+    res.render('register', { title: 'Register', captcha: captcha.question });
 });
 
 app.post('/register', async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, captcha } = req.body;
+    
+    // Verify captcha
+    if (!verifyCaptcha(captcha, req.session.captchaAnswer)) {
+        return res.status(400).send('Invalid captcha. Please try again.');
+    }
+    
+    // Clear captcha from session after use
+    delete req.session.captchaAnswer;
     if (!username || !password) return res.status(400).send("Username and password are required.");
 
     const existingUser = await db.get(`users.${username}`);
@@ -774,11 +939,21 @@ app.post('/register', async (req, res) => {
 
 app.get('/login', (req, res) => {
     if (req.session.user) return res.redirect('/');
-    res.render('login', { title: 'Login' });
+    const captcha = generateCaptcha();
+    req.session.captchaAnswer = captcha.answer;
+    res.render('login', { title: 'Login', captcha: captcha.question });
 });
 
 app.post('/login', async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, captcha } = req.body;
+    
+    // Verify captcha
+    if (!verifyCaptcha(captcha, req.session.captchaAnswer)) {
+        return res.status(400).send('Invalid captcha. Please try again.');
+    }
+    
+    // Clear captcha from session after use
+    delete req.session.captchaAnswer;
     const user = await db.get(`users.${username}`);
     if (!user) return res.status(400).send("Invalid username or password.");
 
@@ -798,13 +973,23 @@ app.get('/settings', async (req, res) => {
     if (!req.session.user) return res.redirect('/login');
     const user = await db.get(`users.${req.session.user.username}`);
     const blueskySettings = await db.get(`users.${req.session.user.username}.blueskySettings`) || {};
-    res.render('settings', { title: 'Settings', user, blueskySettings });
+    const captcha = generateCaptcha();
+    req.session.captchaAnswer = captcha.answer;
+    res.render('settings', { title: 'Settings', user, blueskySettings, captcha: captcha.question });
 });
 
 app.post('/settings', async (req, res) => {
     if (!req.session.user) return res.status(401).send('Unauthorized');
-    const { displayName, bio, customCss, blueskyHandle, blueskyPassword, enableBlueskyBridge } = req.body;
+    const { displayName, bio, customCss, blueskyHandle, blueskyPassword, enableBlueskyBridge, captcha } = req.body;
     const { username } = req.session.user;
+    
+    // Verify captcha
+    if (!verifyCaptcha(captcha, req.session.captchaAnswer)) {
+        return res.status(400).send('Invalid captcha. Please try again.');
+    }
+    
+    // Clear captcha from session after use
+    delete req.session.captchaAnswer;
 
     const sanitizedCss = sanitizeHtml(customCss, {
         allowedTags: [],

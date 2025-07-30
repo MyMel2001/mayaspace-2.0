@@ -120,13 +120,14 @@
                             </div>
                             
                             <!-- Reply form (initially hidden) -->
-                            <div id="reply-<%= post.id %>" class="reply-form hidden">
-                                <form action="/reply" method="POST">
-                                    <input type="hidden" name="postId" value="<%= post.id %>">
-                                    <textarea name="content" placeholder="Write a reply..." rows="3"></textarea>
-                                    <button type="submit" class="btn btn-primary btn-sm">Reply</button>
-                                </form>
-                            </div>
+                                                         <div id="reply-<%= post.id %>" class="reply-form hidden">
+                                 <form action="/reply" method="POST">
+                                     <input type="hidden" name="postId" value="<%= post.id %>">
+                                     <textarea name="content" placeholder="Write a reply..." rows="3"></textarea>
+                                     <%- include('partials/captcha', { id: 'reply-' + post.id, size: 'small', context: 'reply' }) %>
+                                     <button type="submit" class="btn btn-primary btn-sm">Reply</button>
+                                 </form>
+                             </div>
                             <% } %>
                         </article>
                     <% }) %>
@@ -184,10 +185,12 @@
             if (dislikeCount) dislikeCount.textContent = data.dislikes || 0;
         }
         
-        function toggleReply(postId) {
-            const replyForm = document.getElementById(`reply-${postId}`);
-            replyForm.classList.toggle('hidden');
-        }
+                 function toggleReply(postId) {
+             const replyForm = document.getElementById(`reply-${postId}`);
+             replyForm.classList.toggle('hidden');
+             
+             // Captcha will auto-load via the partial template
+         }
         
         async function followUser(userId) {
             try {

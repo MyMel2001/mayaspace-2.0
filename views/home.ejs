@@ -30,13 +30,15 @@
                 <h3>Create a new post</h3>
                 <form action="/new-post" method="POST" enctype="multipart/form-data">
                     <textarea name="content" placeholder="What's happening?" required></textarea>
-                    <div class="post-form-actions">
-                        <div class="file-input">
-                            <input type="file" name="media" id="mediaInput">
-                            <button type="button" class="btn btn-secondary">📎 Attach Media</button>
+                                            <%- include('partials/captcha', { id: 'post-captcha', size: 'large', context: 'post' }) %>
+                        
+                        <div class="post-form-actions">
+                            <div class="file-input">
+                                <input type="file" name="media" id="mediaInput">
+                                <button type="button" class="btn btn-secondary">📎 Attach Media</button>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Post</button>
                         </div>
-                        <button type="submit" class="btn btn-primary">Post</button>
-                    </div>
                 </form>
             </div>
             <% } %>
@@ -95,13 +97,14 @@
                         </div>
                         
                         <!-- Reply form (initially hidden) -->
-                        <div id="reply-<%= post.id %>" class="reply-form hidden">
-                            <form action="/reply" method="POST">
-                                <input type="hidden" name="postId" value="<%= post.id %>">
-                                <textarea name="content" placeholder="Write a reply..." rows="3"></textarea>
-                                <button type="submit" class="btn btn-primary btn-sm">Reply</button>
-                            </form>
-                        </div>
+                                                    <div id="reply-<%= post.id %>" class="reply-form hidden">
+                                <form action="/reply" method="POST">
+                                    <input type="hidden" name="postId" value="<%= post.id %>">
+                                    <textarea name="content" placeholder="Write a reply..." rows="3"></textarea>
+                                    <%- include('partials/captcha', { id: 'reply-' + post.id, size: 'small', context: 'reply' }) %>
+                                    <button type="submit" class="btn btn-primary btn-sm">Reply</button>
+                                </form>
+                            </div>
                         <% } %>
                     </article>
                 <% }) %>
@@ -210,6 +213,8 @@
         function toggleReply(postId) {
             const replyForm = document.getElementById(`reply-${postId}`);
             replyForm.classList.toggle('hidden');
+            
+            // Captcha will auto-load via the partial template
         }
         
         async function followUser(userId) {
