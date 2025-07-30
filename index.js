@@ -272,6 +272,15 @@ app.post('/reply', async (req, res) => {
     };
     
     await db.push('posts', reply);
+    
+    // Bridge reply to Bluesky if both users have it enabled
+    try {
+      await bridgeReplyToBluesky(req.session.user.username, reply, parentPost);
+    } catch (error) {
+      console.error('Bluesky reply bridge error:', error);
+      // Don't fail the reply if Bluesky bridge fails
+    }
+    
     res.redirect('/');
   } catch (error) {
     console.error('Reply error:', error);
@@ -401,6 +410,88 @@ async function bridgeToBluesky(username, post) {
     
   } catch (error) {
     console.error('Bluesky bridge error for user', username, ':', error);
+    console.error('Error details:', {
+      message: error.message,
+      status: error.status,
+      code: error.code
+    });
+    throw error;
+  }
+}
+
+// Bluesky bridge functionality for replies
+async function bridgeReplyToBluesky(replyUsername, reply, originalPost) {
+  console.log('=== CHECKING BLUESKY REPLY BRIDGE ===');
+  console.log('Reply author:', replyUsername);
+  console.log('Original post author:', originalPost.author);
+  
+  // Get both users' Bluesky settings
+  const replyUserSettings = await db.get(`users.${replyUsername}.blueskySettings`);
+  const originalUserSettings = await db.get(`users.${originalPost.author}.blueskySettings`);
+  
+  console.log('Reply user has Bluesky enabled:', replyUserSettings?.enabled && replyUserSettings?.connected);
+  console.log('Original user has Bluesky enabled:', originalUserSettings?.enabled && originalUserSettings?.connected);
+  
+  // Both users must have Bluesky bridge enabled and connected
+  if (!replyUserSettings?.enabled || !replyUserSettings?.connected || 
+      !originalUserSettings?.enabled || !originalUserSettings?.connected) {
+    console.log('Skipping Bluesky reply bridge - not both users have it enabled/connected');
+    return;
+  }
+  
+  try {
+    console.log('Bridging reply to Bluesky for user:', replyUsername);
+    const agent = new BskyAgent({ service: 'https://bsky.social' });
+    
+    const loginResult = await agent.login({
+      identifier: replyUserSettings.handle,
+      password: replyUserSettings.password
+    });
+    
+    console.log('Bluesky reply bridge login successful for:', replyUserSettings.handle);
+    
+    // Create reply text with quoted original
+    let replyText = `"${originalPost.content}" --@${originalPost.author}\n\n${reply.content}`;
+    
+    // Add source attribution
+    replyText += `\n\n— Reply from MayaSpace`;
+    
+    // Create Bluesky post
+    const blueskyPost = {
+      text: replyText,
+      createdAt: new Date().toISOString()
+    };
+    
+    // If the original post was bridged to Bluesky, make this a proper reply
+    if (originalPost.blueskyUri) {
+      console.log('Making proper Bluesky reply to:', originalPost.blueskyUri);
+      blueskyPost.reply = {
+        root: originalPost.blueskyUri,
+        parent: originalPost.blueskyUri
+      };
+    } else {
+      console.log('Original post not on Bluesky, posting as quote-style post');
+    }
+    
+    const result = await agent.post(blueskyPost);
+    console.log('Successfully bridged reply to Bluesky:', result.uri);
+    
+    // Convert AT Protocol URI to web URL
+    const postId = result.uri.split('/').pop();
+    const webUrl = `https://bsky.app/profile/${replyUserSettings.handle}/post/${postId}`;
+    console.log('Bluesky reply web URL:', webUrl);
+    
+    // Update the reply with Bluesky URIs
+    const posts = await db.get('posts') || [];
+    const replyIndex = posts.findIndex(p => p.id === reply.id);
+    if (replyIndex !== -1) {
+      posts[replyIndex].blueskyUri = result.uri;
+      posts[replyIndex].blueskyWebUrl = webUrl;
+      await db.set('posts', posts);
+    }
+    
+  } catch (error) {
+    console.error('Bluesky reply bridge error for user', replyUsername, ':', error);
     console.error('Error details:', {
       message: error.message,
       status: error.status,
